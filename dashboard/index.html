@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wireless Forensics — Investigation Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ─── DESIGN TOKENS ─────────────────────────────────────────── */
+    :root {
+      --bg-base:      #0b0e17;
+      --bg-surface:   #111827;
+      --bg-card:      #1a2235;
+      --bg-card-alt:  #1e2a3a;
+      --border:       #243047;
+      --text-primary: #e8edf5;
+      --text-muted:   #7a8ba6;
+      --text-dim:     #4a5a72;
+      --accent:       #3b82f6;
+      --accent-glow:  rgba(59,130,246,0.15);
+      --high:         #ef4444;
+      --high-bg:      rgba(239,68,68,0.12);
+      --medium:       #f59e0b;
+      --medium-bg:    rgba(245,158,11,0.12);
+      --low:          #22d3ee;
+      --low-bg:       rgba(34,211,238,0.10);
+      --success:      #10b981;
+      --success-bg:   rgba(16,185,129,0.10);
+      --sidebar-w:    240px;
+      --radius:       10px;
+      --radius-sm:    6px;
+    }
+
+    /* ─── RESET & BASE ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg-base); color: var(--text-primary); font-size: 14px; overflow: hidden; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─── LAYOUT ────────────────────────────────────────────────── */
+    .app { display: flex; height: 100vh; }
+
+    /* ─── SIDEBAR ───────────────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 0 0 16px;
+    }
+    .sidebar-brand {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-brand .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 13px; letter-spacing: 0.5px;
+      color: var(--text-primary);
+    }
+    .sidebar-brand .logo-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .sidebar-brand .logo-sub {
+      font-size: 10px; color: var(--text-muted); font-weight: 400;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .sidebar-nav { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: var(--radius-sm);
+      cursor: pointer; transition: all 0.15s ease;
+      color: var(--text-muted); font-size: 13px; font-weight: 500;
+      border: 1px solid transparent;
+    }
+    .nav-item:hover { background: var(--bg-card); color: var(--text-primary); }
+    .nav-item.active {
+      background: var(--accent-glow); color: var(--accent);
+      border-color: rgba(59,130,246,0.25);
+    }
+    .nav-icon { font-size: 15px; width: 20px; text-align: center; }
+    .nav-badge {
+      margin-left: auto; background: var(--high);
+      color: #fff; font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 10px;
+      min-width: 18px; text-align: center;
+    }
+
+    /* Connection panel */
+    .sidebar-conn {
+      margin: 0 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+    }
+    .conn-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); margin-bottom: 8px; font-weight: 600; }
+    .conn-row { display: flex; gap: 6px; }
+    .conn-input {
+      flex: 1; background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 6px 8px;
+      color: var(--text-primary); font-size: 12px; font-family: 'JetBrains Mono', monospace;
+      outline: none;
+    }
+    .conn-input:focus { border-color: var(--accent); }
+    .conn-btn {
+      background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius-sm);
+      padding: 6px 10px; cursor: pointer; font-size: 12px; font-weight: 600;
+      transition: opacity 0.15s;
+    }
+    .conn-btn:hover { opacity: 0.85; }
+    .conn-status {
+      display: flex; align-items: center; gap: 5px;
+      margin-top: 7px; font-size: 11px; color: var(--text-muted);
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim);
+      flex-shrink: 0; transition: background 0.3s;
+    }
+    .status-dot.online  { background: var(--success); box-shadow: 0 0 6px var(--success); animation: pulse 2s infinite; }
+    .status-dot.offline { background: var(--high); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    /* ─── MAIN CONTENT ──────────────────────────────────────────── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .topbar-title { font-size: 16px; font-weight: 600; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .refresh-info { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+
+    /* ─── PANELS ────────────────────────────────────────────────── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ─── STAT CARDS ────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .stat-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; margin-bottom: 10px; }
+    .stat-value { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+    .stat-sub { font-size: 11px; color: var(--text-muted); }
+    .stat-card.high   .stat-value { color: var(--high); }
+    .stat-card.medium .stat-value { color: var(--medium); }
+    .stat-card.low    .stat-value { color: var(--low); }
+    .stat-card.info   .stat-value { color: var(--accent); }
+    .stat-card.success .stat-value { color: var(--success); }
+
+    /* ─── CHART ROW ─────────────────────────────────────────────── */
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+    .chart-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px;
+    }
+    .chart-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
+    .chart-wrap { position: relative; height: 200px; }
+
+    /* ─── SECTION HEADER ────────────────────────────────────────── */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); }
+    .filter-row { display: flex; gap: 6px; }
+    .filter-btn {
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border);
+      background: transparent; color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .filter-btn:hover, .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .filter-btn.high.active   { background: var(--high); border-color: var(--high); }
+    .filter-btn.medium.active { background: var(--medium); border-color: var(--medium); }
+    .filter-btn.low.active    { background: var(--low); border-color: var(--low); }
+
+    /* ─── ALERTS TABLE ──────────────────────────────────────────── */
+    .alerts-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .alerts-table { width: 100%; border-collapse: collapse; }
+    .alerts-table th {
+      text-align: left; padding: 10px 14px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-dim); font-weight: 600;
+      background: var(--bg-card-alt); border-bottom: 1px solid var(--border);
+    }
+    .alerts-table td { padding: 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .alerts-table tr:last-child td { border-bottom: none; }
+    .alert-row-main {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .alert-row-main:hover { background: var(--bg-card-alt); }
+    .sev-badge {
+      padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.5px; flex-shrink: 0; text-transform: uppercase;
+    }
+    .sev-badge.High   { background: var(--high-bg);   color: var(--high); }
+    .sev-badge.Medium { background: var(--medium-bg); color: var(--medium); }
+    .sev-badge.Low    { background: var(--low-bg);    color: var(--low); }
+    .alert-type { font-size: 12px; font-weight: 600; color: var(--text-primary); min-width: 160px; flex-shrink: 0; }
+    .alert-desc { font-size: 12px; color: var(--text-muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .alert-time { font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
+    .expand-icon { color: var(--text-dim); font-size: 10px; flex-shrink: 0; transition: transform 0.2s; }
+
+    .alert-evidence {
+      display: none; padding: 12px 14px 14px 14px;
+      background: var(--bg-base); border-top: 1px solid var(--border);
+    }
+    .alert-evidence.open { display: block; }
+    .evidence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+    .evidence-item label { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 600; margin-bottom: 3px; }
+    .evidence-item span { font-size: 12px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; word-break: break-all; }
+    .evidence-raw { margin-top: 10px; }
+    .evidence-raw label { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 600; margin-bottom: 4px; }
+    .evidence-raw pre {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 12px;
+      font-size: 11px; font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted); white-space: pre-wrap; word-break: break-word;
+    }
+
+    /* ─── TIMELINE ──────────────────────────────────────────────── */
+    .timeline { position: relative; padding-left: 30px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 10px; top: 0; bottom: 0;
+      width: 2px; background: var(--border);
+    }
+    .tl-item { position: relative; margin-bottom: 16px; }
+    .tl-dot {
+      position: absolute; left: -24px; top: 12px;
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid var(--bg-base); flex-shrink: 0;
+    }
+    .tl-dot.High   { background: var(--high);   box-shadow: 0 0 8px var(--high); }
+    .tl-dot.Medium { background: var(--medium); box-shadow: 0 0 8px var(--medium); }
+    .tl-dot.Low    { background: var(--low);    box-shadow: 0 0 8px var(--low); }
+    .tl-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px;
+      transition: border-color 0.2s;
+    }
+    .tl-card:hover { border-color: rgba(59,130,246,0.4); }
+    .tl-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+    .tl-time { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); }
+    .tl-type { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .tl-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .tl-meta { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); }
+
+    /* ─── NETWORK MAP ───────────────────────────────────────────── */
+    .net-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .net-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .net-head { padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card-alt); font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .net-head-count { margin-left: auto; font-size: 11px; color: var(--text-muted); background: var(--bg-base); padding: 2px 8px; border-radius: 10px; }
+    .net-list { max-height: 420px; overflow-y: auto; }
+    .net-item { padding: 10px 16px; border-bottom: 1px solid var(--border); transition: background 0.12s; }
+    .net-item:last-child { border-bottom: none; }
+    .net-item:hover { background: var(--bg-card-alt); }
+    .net-item.alerted { border-left: 3px solid var(--high); }
+    .net-mac { font-size: 12px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text-primary); margin-bottom: 3px; }
+    .net-detail { font-size: 11px; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .net-tag { background: var(--bg-base); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
+
+    /* ─── EMPTY STATE ───────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.3; }
+    .empty-state p { font-size: 13px; }
+
+    /* ─── LOADING ───────────────────────────────────────────────── */
+    .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── SIDEBAR ───────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">📡</div>
+        <div>
+          <div>WF · Forensics</div>
+          <div class="logo-sub">Investigation Dashboard</div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-item active" data-panel="overview" onclick="navigate(this)">
+        <span class="nav-icon">🛡️</span> Overview
+      </div>
+      <div class="nav-item" data-panel="alerts" onclick="navigate(this)">
+        <span class="nav-icon">🚨</span> Alerts
+        <span class="nav-badge" id="nav-badge-alerts">0</span>
+      </div>
+      <div class="nav-item" data-panel="timeline" onclick="navigate(this)">
+        <span class="nav-icon">📅</span> Timeline
+      </div>
+      <div class="nav-item" data-panel="network" onclick="navigate(this)">
+        <span class="nav-icon">📡</span> Network Map
+      </div>
+    </nav>
+
+    <!-- Connection box -->
+    <div class="sidebar-conn">
+      <div class="conn-label">Kali API Server</div>
+      <div class="conn-row">
+        <input class="conn-input" id="api-url" type="text" value="http://localhost:5000" placeholder="http://192.168.x.x:5000" />
+        <button class="conn-btn" onclick="connect()">▶</button>
+      </div>
+      <div class="conn-status">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Not connected</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ──────────────────────────────────────────── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Overview</div>
+      <div class="topbar-right">
+        <span class="refresh-info" id="refresh-info">Auto-refresh: off</span>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ══ OVERVIEW PANEL ═══════════════════════════════ -->
+      <div class="panel active" id="panel-overview">
+        <div class="stat-grid" id="stat-grid">
+          <div class="stat-card high">  <div class="stat-label">High Severity</div>  <div class="stat-value" id="stat-high">—</div>  <div class="stat-sub">alerts</div> </div>
+          <div class="stat-card medium"><div class="stat-label">Medium Severity</div><div class="stat-value" id="stat-medium">—</div><div class="stat-sub">alerts</div> </div>
+          <div class="stat-card low">   <div class="stat-label">Low Severity</div>   <div class="stat-value" id="stat-low">—</div>   <div class="stat-sub">alerts</div> </div>
+          <div class="stat-card info">  <div class="stat-label">Total Alerts</div>   <div class="stat-value" id="stat-total">—</div>  <div class="stat-sub">detected</div> </div>
+          <div class="stat-card success"><div class="stat-label">Known APs</div>     <div class="stat-value" id="stat-aps">—</div>    <div class="stat-sub">in baseline</div> </div>
+          <div class="stat-card info">  <div class="stat-label">Known Clients</div>  <div class="stat-value" id="stat-clients">—</div><div class="stat-sub">in baseline</div> </div>
+        </div>
+
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">Alert Type Breakdown</div>
+            <div class="chart-wrap"><canvas id="chart-types"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Severity Distribution</div>
+            <div class="chart-wrap"><canvas id="chart-sev"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Recent alerts preview -->
+        <div class="section-header"><div class="section-title">Recent Alerts</div></div>
+        <div class="alerts-table-wrap">
+          <table class="alerts-table">
+            <thead><tr>
+              <th>Severity</th><th>Type</th><th>Description</th><th>Time</th>
+            </tr></thead>
+            <tbody id="recent-alerts-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ ALERTS PANEL ══════════════════════════════════ -->
+      <div class="panel" id="panel-alerts">
+        <div class="section-header">
+          <div class="section-title">All Alerts</div>
+          <div class="filter-row">
+            <button class="filter-btn active" data-sev="all"    onclick="filterAlerts(this)">All</button>
+            <button class="filter-btn high"   data-sev="High"   onclick="filterAlerts(this)">High</button>
+            <button class="filter-btn medium" data-sev="Medium" onclick="filterAlerts(this)">Medium</button>
+            <button class="filter-btn low"    data-sev="Low"    onclick="filterAlerts(this)">Low</button>
+          </div>
+        </div>
+        <div class="alerts-table-wrap">
+          <table class="alerts-table">
+            <thead><tr>
+              <th style="width:85px">Severity</th>
+              <th style="width:170px">Type</th>
+              <th>Description</th>
+              <th style="width:140px">Time</th>
+              <th style="width:20px"></th>
+            </tr></thead>
+            <tbody id="alerts-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ TIMELINE PANEL ════════════════════════════════ -->
+      <div class="panel" id="panel-timeline">
+        <div class="section-header">
+          <div class="section-title">Forensic Timeline</div>
+        </div>
+        <div class="timeline" id="timeline-body"></div>
+      </div>
+
+      <!-- ══ NETWORK MAP PANEL ═════════════════════════════ -->
+      <div class="panel" id="panel-network">
+        <div class="section-header">
+          <div class="section-title">Network Map — Baseline Devices</div>
+        </div>
+        <div class="net-grid">
+          <div class="net-section">
+            <div class="net-head">📶 Access Points <span class="net-head-count" id="ap-count">0</span></div>
+            <div class="net-list" id="ap-list"></div>
+          </div>
+          <div class="net-section">
+            <div class="net-head">💻 Clients <span class="net-head-count" id="client-count">0</span></div>
+            <div class="net-list" id="client-list"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ─── STATE ──────────────────────────────────────────────────────
+let API_BASE = 'http://localhost:5000';
+let connected = false;
+let refreshTimer = null;
+let chartTypes = null;
+let chartSev = null;
+let allAlerts = [];
+let alertedBssids = new Set();
+let currentSevFilter = 'all';
+
+// ─── NAV ────────────────────────────────────────────────────────
+function navigate(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  const panel = el.dataset.panel;
+  document.getElementById('panel-' + panel).classList.add('active');
+  const titles = { overview: 'Overview', alerts: 'Alerts Feed', timeline: 'Forensic Timeline', network: 'Network Map' };
+  document.getElementById('topbar-title').textContent = titles[panel] || panel;
+}
+
+// ─── CONNECTION ──────────────────────────────────────────────────
+function connect() {
+  const url = document.getElementById('api-url').value.trim().replace(/\/$/, '');
+  API_BASE = url;
+  fetchAll();
+}
+
+function setStatus(online, msg) {
+  connected = online;
+  document.getElementById('status-dot').className = 'status-dot ' + (online ? 'online' : 'offline');
+  document.getElementById('status-text').textContent = msg;
+}
+
+// ─── FETCH ───────────────────────────────────────────────────────
+async function fetchJSON(path) {
+  const r = await fetch(API_BASE + path);
+  if (!r.ok) throw new Error(r.statusText);
+  return r.json();
+}
+
+async function fetchAll() {
+  try {
+    await fetchJSON('/api/health');
+    setStatus(true, 'Connected');
+    if (!refreshTimer) startRefresh();
+  } catch(e) {
+    setStatus(false, 'Cannot reach API');
+    return;
+  }
+  try {
+    const [stats, alerts, timeline, aps, clients] = await Promise.all([
+      fetchJSON('/api/stats'),
+      fetchJSON('/api/alerts'),
+      fetchJSON('/api/timeline'),
+      fetchJSON('/api/baseline/aps'),
+      fetchJSON('/api/baseline/clients'),
+    ]);
+    allAlerts = alerts;
+    alertedBssids = new Set(alerts.map(a => a.bssid).filter(Boolean));
+    renderStats(stats);
+    renderCharts(stats);
+    renderRecentAlerts(alerts.slice(0, 8));
+    renderAlerts(alerts);
+    renderTimeline(timeline);
+    renderNetwork(aps, clients);
+    document.getElementById('nav-badge-alerts').textContent = alerts.length;
+    document.getElementById('refresh-info').textContent = 'Refreshed ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error('Fetch error', e);
+  }
+}
+
+function startRefresh() {
+  refreshTimer = setInterval(fetchAll, 5000);
+}
+
+// ─── RENDER: STATS ───────────────────────────────────────────────
+function renderStats(s) {
+  document.getElementById('stat-high').textContent   = s.high_severity;
+  document.getElementById('stat-medium').textContent = s.medium_severity;
+  document.getElementById('stat-low').textContent    = s.low_severity;
+  document.getElementById('stat-total').textContent  = s.total_alerts;
+  document.getElementById('stat-aps').textContent    = s.known_aps;
+  document.getElementById('stat-clients').textContent= s.known_clients;
+}
+
+// ─── RENDER: CHARTS ──────────────────────────────────────────────
+function renderCharts(stats) {
+  const typeLabels = stats.alert_types.map(t => t.anomaly_type.replace(/_/g,' '));
+  const typeCounts = stats.alert_types.map(t => t.count);
+  const typeColors = ['#ef4444','#f59e0b','#3b82f6','#8b5cf6','#10b981','#ec4899'];
+
+  if (chartTypes) chartTypes.destroy();
+  const ctxT = document.getElementById('chart-types').getContext('2d');
+  chartTypes = new Chart(ctxT, {
+    type: 'bar',
+    data: { labels: typeLabels, datasets: [{ data: typeCounts, backgroundColor: typeColors, borderRadius: 4, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#243047' }, ticks: { color: '#7a8ba6', font: { size: 10 } } },
+        y: { grid: { color: '#243047' }, ticks: { color: '#7a8ba6', font: { size: 10 }, stepSize: 1 } }
+      }
+    }
+  });
+
+  if (chartSev) chartSev.destroy();
+  const ctxS = document.getElementById('chart-sev').getContext('2d');
+  chartSev = new Chart(ctxS, {
+    type: 'doughnut',
+    data: {
+      labels: ['High', 'Medium', 'Low'],
+      datasets: [{ data: [stats.high_severity, stats.medium_severity, stats.low_severity], backgroundColor: ['#ef4444','#f59e0b','#22d3ee'], borderWidth: 0, hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: { legend: { position: 'right', labels: { color: '#7a8ba6', font: { size: 11 }, boxWidth: 12, padding: 12 } } }
+    }
+  });
+}
+
+// ─── RENDER: RECENT ALERTS (overview) ───────────────────────────
+function renderRecentAlerts(alerts) {
+  const tbody = document.getElementById('recent-alerts-body');
+  if (!alerts.length) { tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="icon">🔍</div><p>No alerts yet. Run the detection engine first.</p></div></td></tr>`; return; }
+  tbody.innerHTML = alerts.map(a => `
+    <tr>
+      <td><div class="alert-row-main" style="cursor:default">
+        <span class="sev-badge ${a.severity}">${a.severity}</span>
+      </div></td>
+      <td><div class="alert-row-main" style="cursor:default">
+        <span class="alert-type">${fmtType(a.anomaly_type)}</span>
+      </div></td>
+      <td><div class="alert-row-main" style="cursor:default">
+        <span class="alert-desc">${esc(a.description)}</span>
+      </div></td>
+      <td><div class="alert-row-main" style="cursor:default">
+        <span class="alert-time">${fmtTime(a.timestamp)}</span>
+      </div></td>
+    </tr>`).join('');
+}
+
+// ─── RENDER: ALERTS FEED ────────────────────────────────────────
+function renderAlerts(alerts) {
+  const filtered = currentSevFilter === 'all' ? alerts : alerts.filter(a => a.severity === currentSevFilter);
+  const tbody = document.getElementById('alerts-body');
+  if (!filtered.length) { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="icon">✅</div><p>No alerts match this filter.</p></div></td></tr>`; return; }
+  tbody.innerHTML = filtered.map((a, i) => `
+    <tr>
+      <td>
+        <div class="alert-row-main" onclick="toggleEvidence(${i})">
+          <span class="sev-badge ${a.severity}">${a.severity}</span>
+          <span class="alert-type">${fmtType(a.anomaly_type)}</span>
+          <span class="alert-desc">${esc(a.description)}</span>
+          <span class="alert-time">${fmtTime(a.timestamp)}</span>
+          <span class="expand-icon" id="expand-${i}">▼</span>
+        </div>
+        <div class="alert-evidence" id="evidence-${i}">
+          <div class="evidence-grid">
+            ${a.bssid      ? `<div class="evidence-item"><label>BSSID / MAC</label><span>${esc(a.bssid)}</span></div>` : ''}
+            ${a.client_mac ? `<div class="evidence-item"><label>Client MAC</label><span>${esc(a.client_mac)}</span></div>` : ''}
+            <div class="evidence-item"><label>Detected At</label><span>${fmtTimeFull(a.timestamp)}</span></div>
+            <div class="evidence-item"><label>Anomaly Type</label><span>${esc(a.anomaly_type)}</span></div>
+          </div>
+          ${a.evidence ? `<div class="evidence-raw"><label>Raw Evidence</label><pre>${esc(a.evidence)}</pre></div>` : ''}
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function toggleEvidence(i) {
+  const ev = document.getElementById('evidence-' + i);
+  const ic = document.getElementById('expand-' + i);
+  const open = ev.classList.toggle('open');
+  ic.style.transform = open ? 'rotate(180deg)' : '';
+}
+
+function filterAlerts(btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentSevFilter = btn.dataset.sev;
+  renderAlerts(allAlerts);
+}
+
+// ─── RENDER: TIMELINE ────────────────────────────────────────────
+function renderTimeline(events) {
+  const el = document.getElementById('timeline-body');
+  if (!events.length) { el.innerHTML = `<div class="empty-state"><div class="icon">📅</div><p>No events yet.</p></div>`; return; }
+  el.innerHTML = events.map(e => `
+    <div class="tl-item">
+      <div class="tl-dot ${e.severity}"></div>
+      <div class="tl-card">
+        <div class="tl-card-header">
+          <span class="sev-badge ${e.severity}">${e.severity}</span>
+          <span class="tl-type">${fmtType(e.anomaly_type)}</span>
+          <span class="tl-time">${fmtTimeFull(e.timestamp)}</span>
+        </div>
+        <div class="tl-desc">${esc(e.description)}</div>
+        <div class="tl-meta">
+          ${e.bssid ? `BSSID: ${e.bssid}` : ''}
+          ${e.client_mac ? ` · Client: ${e.client_mac}` : ''}
+          ${e.evidence ? ` · ${e.evidence}` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ─── RENDER: NETWORK MAP ─────────────────────────────────────────
+function renderNetwork(aps, clients) {
+  document.getElementById('ap-count').textContent = aps.length;
+  document.getElementById('client-count').textContent = clients.length;
+
+  const apList = document.getElementById('ap-list');
+  if (!aps.length) { apList.innerHTML = '<div class="empty-state"><p>No APs in baseline yet.</p></div>'; }
+  else apList.innerHTML = aps.map(ap => `
+    <div class="net-item ${alertedBssids.has(ap.bssid) ? 'alerted' : ''}">
+      <div class="net-mac">${esc(ap.bssid)}</div>
+      <div class="net-detail">
+        ${ap.ssid ? `<span>${esc(ap.ssid)}</span>` : ''}
+        ${ap.channel ? `<span class="net-tag">CH ${ap.channel}</span>` : ''}
+        ${ap.encryption ? `<span class="net-tag">${esc(ap.encryption)}</span>` : ''}
+        <span style="color:var(--text-dim);font-size:10px">Last seen ${fmtTime(ap.last_seen)}</span>
+      </div>
+    </div>`).join('');
+
+  const clientList = document.getElementById('client-list');
+  if (!clients.length) { clientList.innerHTML = '<div class="empty-state"><p>No clients in baseline yet.</p></div>'; }
+  else clientList.innerHTML = clients.map(c => `
+    <div class="net-item ${alertedBssids.has(c.associated_bssid) ? 'alerted' : ''}">
+      <div class="net-mac">${esc(c.mac)}</div>
+      <div class="net-detail">
+        ${c.associated_bssid ? `<span class="net-tag">${esc(c.associated_bssid)}</span>` : ''}
+        <span style="color:var(--text-dim);font-size:10px">Last seen ${fmtTime(c.last_seen)}</span>
+      </div>
+    </div>`).join('');
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────
+function esc(s) { if(!s) return ''; const d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
+function fmtType(t) { return t ? t.replace(/_/g, ' ') : ''; }
+function fmtTime(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleTimeString(); } catch(e){ return ts; }
+}
+function fmtTimeFull(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleString(); } catch(e){ return ts; }
+}
+
+// ─── INIT ────────────────────────────────────────────────────────
+// Auto-connect on load using the default URL
+fetchAll();
+</script>
+</body>
+</html>
